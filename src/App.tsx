@@ -1,18 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from './store/store'
 import { projectsSorted, childrenOf } from './lib/tree'
 import { seedSampleData } from './lib/seed'
 import { OutlineView } from './views/OutlineView'
 import { AgendaView } from './views/AgendaView'
+import { KanbanView } from './views/KanbanView'
+import { CalendarView } from './views/CalendarView'
 import { TaskDrawer } from './components/TaskDrawer'
 
 type ViewKey = 'outline' | 'agenda' | 'calendar' | 'kanban'
 
-const TABS: { key: ViewKey; label: string; ready: boolean }[] = [
-  { key: 'outline', label: 'Outline', ready: true },
-  { key: 'agenda', label: 'Agenda', ready: true },
-  { key: 'calendar', label: 'Calendar', ready: false },
-  { key: 'kanban', label: 'Kanban', ready: false },
+const TABS: { key: ViewKey; label: string }[] = [
+  { key: 'outline', label: 'Outline' },
+  { key: 'agenda', label: 'Agenda' },
+  { key: 'calendar', label: 'Calendar' },
+  { key: 'kanban', label: 'Kanban' },
 ]
 
 export default function App() {
@@ -25,12 +27,23 @@ export default function App() {
   const [openTaskId, setOpenTaskId] = useState<string | null>(null)
   const [hideDone, setHideDone] = useState(false)
 
-  // Keep an active project selected once data exists.
+  // Select the first project once on initial load (null thereafter means
+  // "All projects", an intentional scope rather than an unset state).
+  const didInit = useRef(false)
   useEffect(() => {
-    if (!loading && projects.length && !projects.some((p) => p.id === activeProjectId)) {
+    if (loading || didInit.current) return
+    if (projects.length) {
       setActiveProjectId(projects[0].id)
+      didInit.current = true
     }
-  }, [loading, projects, activeProjectId])
+  }, [loading, projects])
+
+  // If the selected project is deleted, fall back to the "All projects" scope.
+  useEffect(() => {
+    if (activeProjectId && !projects.some((p) => p.id === activeProjectId)) {
+      setActiveProjectId(null)
+    }
+  }, [projects, activeProjectId])
 
   if (loading) {
     return <div className="empty">Loading…</div>
@@ -62,16 +75,27 @@ export default function App() {
               No projects yet.
             </p>
           )}
+          {projects.length > 0 && (
+            <button
+              className={`project-item ${activeProjectId === null ? 'active' : ''}`}
+              onClick={() => {
+                setActiveProjectId(null)
+                // Outline edits a single project, so steer "All" to a cross-cutting view.
+                if (view === 'outline') setView('agenda')
+              }}
+            >
+              <span className="project-dot" style={{ background: 'var(--text-faint)' }} />
+              <span className="project-name">All projects</span>
+              <span className="count">{Object.keys(data.tasks).length}</span>
+            </button>
+          )}
           {projects.map((p) => {
             const count = childrenOf(data, p.id, null).length
             return (
               <button
                 key={p.id}
                 className={`project-item ${p.id === activeProjectId ? 'active' : ''}`}
-                onClick={() => {
-                  setActiveProjectId(p.id)
-                  if (view === 'calendar' || view === 'kanban') setView('outline')
-                }}
+                onClick={() => setActiveProjectId(p.id)}
               >
                 <span className="project-dot" style={{ background: p.color }} />
                 <span className="project-name">{p.name}</span>
@@ -88,12 +112,10 @@ export default function App() {
           {TABS.map((t) => (
             <button
               key={t.key}
-              className={`tab ${view === t.key ? 'active' : ''} ${t.ready ? '' : 'disabled'}`}
-              onClick={() => t.ready && setView(t.key)}
-              disabled={!t.ready}
+              className={`tab ${view === t.key ? 'active' : ''}`}
+              onClick={() => setView(t.key)}
             >
               {t.label}
-              {!t.ready && <span className="soon">soon</span>}
             </button>
           ))}
         </nav>
@@ -129,9 +151,26 @@ export default function App() {
             hideDone={hideDone}
             onOpenTask={setOpenTaskId}
           />
+        ) : view === 'kanban' ? (
+          <KanbanView
+            projectId={activeProjectId}
+            hideDone={hideDone}
+            onOpenTask={setOpenTaskId}
+          />
+        ) : view === 'calendar' ? (
+          <CalendarView
+            projectId={activeProjectId}
+            hideDone={hideDone}
+            onOpenTask={setOpenTaskId}
+          />
         ) : view === 'outline' && activeProject ? (
           <OutlineView project={activeProject} onOpenTask={setOpenTaskId} />
-        ) : null}
+        ) : (
+          <div className="empty">
+            <h3>Pick a project</h3>
+            <p>The Outline edits one project's task tree. Choose a project in the sidebar, or switch to Agenda, Calendar or Kanban to see everything at once.</p>
+          </div>
+        )}
       </main>
 
       {openTaskId && <TaskDrawer taskId={openTaskId} onClose={() => setOpenTaskId(null)} />}

@@ -77,6 +77,16 @@ export function allTasksWithContext(data: AppData): TaskWithContext[] {
     .filter((c): c is TaskWithContext => c !== null)
 }
 
+/**
+ * Tasks in the current scope: a single project, or all projects when
+ * projectId is null. Shared by Agenda, Kanban and Calendar so "scope" behaves
+ * identically across every view.
+ */
+export function tasksInScope(data: AppData, projectId: string | null): TaskWithContext[] {
+  const all = allTasksWithContext(data)
+  return projectId ? all.filter((c) => c.task.projectId === projectId) : all
+}
+
 /** Lineage as display strings: [project.name, ...ancestor titles]. */
 export function lineageLabels(ctx: TaskWithContext): string[] {
   return [ctx.project.name, ...ctx.ancestors.map((a) => a.title)]
